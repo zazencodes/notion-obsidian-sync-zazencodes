@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { markdownToBlocks } = require("@tryfabric/martian");
 const matter = require('gray-matter');
+const { create } = require("domain");
 
 if (!(process.env.NOTION_API_TOKEN)) throw Error("Set env variable NOTION_API_TOKEN")
 
@@ -26,11 +27,46 @@ async function uploadMarkdownFileToNotion(filePath, databaseId, updateExisting) 
       return;
     }
   }
-  await createMarkdownPage(title, date, markdownContent, frontmatter, databaseId);
+  try {
+    await createMarkdownPage(title, date, markdownContent, frontmatter, databaseId, true, false);
+  } catch (error) {
+    console.log(`Error creating page: ${error}`)
+    if (error.message.includes("length should be")) {
+      console.log("Content too long. Creating empty page.")
+      await createMarkdownPage(title, date, markdownContent, frontmatter, databaseId, false, true);
+    } else {
+      try {
+        console.log("Attempting fallback to plain text Markdown page.")
+        await createMarkdownPage(title, date, markdownContent, frontmatter, databaseId, false, false);
+      } catch (error) {
+        if (error.message.includes("length should be")) {
+          console.log("Plain text Markdown content too long. Creating empty page.")
+          await createMarkdownPage(title, date, markdownContent, frontmatter, databaseId, false, true);
+        }
+        else {
+          throw Error(error)
+        }
+      }
+    }
+  }
 }
 
 /**
  * Create new markdown page in database with markdown text.
+ *
+ * @param {string} title - The title of the page.
+ * @param {string} date - The date field.
+ * @param {string} text - The text of the page.
+ * @param {string} frontmatter - The parsed fronmatter object.
+ * @param {string} databaseId - The ID of the notion db.
+ * @paran {boolean} martianBlocks - If true then use martian to render
+ *                                  text to notion blocks. Try with this
+ *                                  set to true, then use false as fallback
+ *                                  (if error in martian blocks, e.g. too
+ *                                  much indentation).
+ * @param {boolean} ignoreContent - Do not upload any content. Try with this
+ *                                  set to false, and then use true as fallback
+ *                                  (if error in length of content).
  *
  * - Name the page using the filename
  *    e.g. 2024-02-27_Dotfiles-stuff is given the name "Dotfiles stuff"
@@ -45,23 +81,33 @@ async function uploadMarkdownFileToNotion(filePath, databaseId, updateExisting) 
  * - Remove the first heading, since it's usually a duplicate
  *   of the title.
  */
-async function createMarkdownPage(title, date, text, frontmatter, databaseId) {
-  let blocks = markdownToBlocks(removeFirstHeading(text));
+async function createMarkdownPage(title, date, text, frontmatter, databaseId, martianBlocks, ignoreContent) {
+
+  let blocks
+  if (ignoreContent) {
+    blocks = [];
+  } else if (martianBlocks) {
+    blocks = markdownToBlocks(removeFirstHeading(text));
+  } else {
+    blocks = markdownToPlainTextBlocks(removeFirstHeading(text));
+  }
 
   const properties = {
-      'Name': {
-        title: [
-          {
-            text: { content: title },
-          },
+    'Name': {
+      title: [
+        {
+          text: { content: title },
+        },
       ],
     },
   }
 
   if (frontmatter.hubs) {
-    properties['Tags'] = {
-      multi_select: frontmatter.hubs.map(hub => ({ name: stripObsidianLink(hub) })),
-    };
+    if (frontmatter.hubs.length > 0) {
+      properties['Tags'] = {
+        multi_select: frontmatter.hubs.map(hub => ({ name: stripObsidianLink(hub) })),
+      };
+    }
   }
 
   if (date) {
@@ -72,6 +118,8 @@ async function createMarkdownPage(title, date, text, frontmatter, databaseId) {
     }
   }
 
+  console.log(JSON.stringify(properties));
+
   try {
     const response = await notion.pages.create({
       parent: { database_id: databaseId },
@@ -80,11 +128,35 @@ async function createMarkdownPage(title, date, text, frontmatter, databaseId) {
     });
     console.log("Success! Entry added.");
   } catch (error) {
-    console.log("Error! Printing blocks:")
-    console.log(blocks);
-    console.log(JSON.stringify(blocks));
+    console.log("Error!")
+    // console.log("Printing blocks:")
+    // console.log(blocks);
+    // console.log(JSON.stringify(blocks));
     throw Error(error);
   }
+}
+
+/**
+ * Create notion API blocks for markdown code block
+ */
+function markdownToPlainTextBlocks(text) {
+  return [
+    {
+      object: 'block',
+      type: 'code',
+      code: {
+        rich_text: [
+          {
+            type: 'text',
+            text: {
+              content: text.trim(),
+            },
+          },
+        ],
+        language: 'markdown',
+      },
+    },
+  ]
 }
 
 /**
@@ -121,10 +193,10 @@ function parseFileNameDate(filename) {
 function removeFirstHeading(text) {
   let lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
-      if (lines[i].startsWith("# ")) {
-          lines.splice(i, 1);
-          break;
-      }
+    if (lines[i].startsWith("# ")) {
+      lines.splice(i, 1);
+      break;
+    }
   }
   return lines.join('\n');
 }
@@ -153,7 +225,7 @@ async function deletePage(title, databaseId) {
     database_id: databaseId,
     filter: {
       property: 'Name',
-      text: {
+      title: {
         equals: title,
       },
     },

@@ -49,6 +49,6 @@ Create a `.env` file with `NOTION_API_TOKEN`. Ensure that each Notion database h
 ## Run
 
 ```
-node batchUpload.js --lastmod-days-window INTEGER --update-existing
+node batchUpload.js --lastmod-days-window INTEGER [--update-existing --dry-run --file-filter 2024-01-09_BigQuery-Spotlight-Series.md]
 ```
 

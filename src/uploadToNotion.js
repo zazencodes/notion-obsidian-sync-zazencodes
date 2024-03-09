@@ -83,13 +83,58 @@ async function uploadMarkdownFileToNotion(filePath, databaseId, updateExisting) 
  */
 async function createMarkdownPage(title, date, text, frontmatter, databaseId, martianBlocks, ignoreContent) {
 
-  let blocks
+  let blocks;
+  let insertUrlSpace = true;
   if (ignoreContent) {
     blocks = [];
   } else if (martianBlocks) {
     blocks = markdownToBlocks(removeFirstHeading(text));
+    for (let block of blocks) {
+      if (block.type == "code") {
+        // Remove annotations block in order to render code block colors property
+        delete block["code"]["rich_text"][0]["annotations"];
+      }
+    }
   } else {
     blocks = markdownToPlainTextBlocks(removeFirstHeading(text));
+  }
+  if (removeFirstHeading(text).trim().startsWith("#")) insertUrlSpace = false;
+  if (frontmatter.urls) {
+    if (frontmatter.urls.length > 0) {
+      if (insertUrlSpace) {
+        blocks.unshift({
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            "rich_text": [
+              {
+                text: {
+                  content: "",
+                },
+              },
+            ],
+          },
+        })
+      }
+      for (const url of frontmatter.urls) {
+        blocks.unshift(
+          {
+            object: 'block',
+            type: 'paragraph',
+            paragraph: {
+              "rich_text": [
+                {
+                  text: {
+                    content: url,
+                    link: { url: url },
+                  },
+                },
+              ],
+            },
+          }
+        )
+      }
+    }
   }
 
   const properties = {

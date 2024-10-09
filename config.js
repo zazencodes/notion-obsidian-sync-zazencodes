@@ -11,6 +11,7 @@ const config = {
     { folder: "cheat-sheet", databaseId: "9fd1106079a94a76a3834472bc555fd6" },
     { folder: "code-snip", databaseId: "445273a8fd1e43b2a4c1e8a0adda0a28" },
     { folder: "prompt", databaseId: "3cfbd55c8c7642fba9b8d0500c22cd0d" },
+    { folder: "podcast", databaseId: "7bab372015af4287a40eb61c7bb16aa3" },
   ]
 }
 

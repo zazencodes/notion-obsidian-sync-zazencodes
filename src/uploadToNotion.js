@@ -100,6 +100,8 @@ async function createMarkdownPage(title, date, text, frontmatter, databaseId, ma
   }
   if (removeFirstHeading(text).trim().startsWith("#")) insertUrlSpace = false;
   if (frontmatter.urls) {
+    // similar to hubs, we need to filter if the urls array have null entires to prevent code from throwing out errors
+    frontmatter.urls = frontmatter.urls.filter(url => url)
     if (frontmatter.urls.length > 0) {
       if (insertUrlSpace) {
         blocks.unshift({
@@ -148,6 +150,9 @@ async function createMarkdownPage(title, date, text, frontmatter, databaseId, ma
   }
 
   if (frontmatter.hubs) {
+    // if we have hubs as a title on the frontmatter and don't actually have any data inserted, there appears to be a case when frontmatter.hubs returns array of null values like [null]
+    // to fix this we can filter through those values and return only those which are not null
+    frontmatter.hubs = frontmatter.hubs.filter(hub => hub)
     if (frontmatter.hubs.length > 0) {
       properties['Tags'] = {
         multi_select: frontmatter.hubs.map(hub => ({ name: stripObsidianLink(hub) })),
